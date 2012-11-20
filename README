@@ -162,3 +162,19 @@ Note: This document borrows many of the concepts and terminology
 related to function addresses and their descriptors from the IA-64
 System V ABI [1, 2].
 
+Procedure Linkage Table (PLT)
+-----------------------------
+
+In order to make direct calls to a function external to a given load
+module, the branch instruction's target is a PLT entry.  (Calls to
+internal, but overridable functions also need PLT entries.)  The PLT
+entry contains instructions for fetching the function's start address
+and global pointer value from a function descriptor associated with
+the function in question.  The function descriptor will be located at
+a fixed offset from the address specified by the FDPIC register.  The
+instructions in a PLT entry could look like this:
+
+        plt(foo):       TBD
+
+TBD
+
