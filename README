@@ -416,3 +416,12 @@ Variables initialized with pointers (to data or code) must not be
 assigned to read-only segments; the dynamic linker will need to set up
 the pointers at module load time.
 
+Preexisting Relocation Types
+----------------------------
+
+The existing relocations implemented by the GNU linker may be used
+with FDPIC code with their existing semantics, although some may not
+be useful in this context.  When an existing relocation is applied to
+a function symbol, it is taken to refer to the function entry point
+(possibly a PLT entry), not to a function descriptor.
+
