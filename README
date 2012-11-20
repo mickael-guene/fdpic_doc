@@ -188,3 +188,100 @@ dynamic linking.  The third (at R9+8) is used by the dynamic linker
 and the debugger to obtain access to information regarding the loaded
 module and the amount that each segment has been relocated by.
 
+Lazy Procedure Linkage
+----------------------
+
+Lazy procedure linkage requires an additional PLT fragment for each
+dynamic function that requires a local descriptor in the module.
+These entries are not large, but their aggregate will increase the
+size of the text segment.  For this reason, the use of lazy dynamic
+linking is optional.  (Implementation of lazy dynamic linking in the
+dynamic linker is mandatory, however.)
+
+A lazy PLT fragment looks like this:
+
+                        TODO
+        lazy_plt(foo):  TODO
+
+The code for "resolverStub" looks like this:
+
+        resolverStub:   TODO
+
+The link editor adds as many ``resolverStub'' fragments as necessary
+to ensure that the branch in each lazy PLT fragment is within range.
+
+It is also possible to inline the resolverStub instructions as
+follows:
+
+                        TODO
+        lazy_plt(foo):  TODO
+
+Lazy PLT fragments have word (32-bit) alignment.
+
+Function descriptors residing in the GOT are initialized so that the
+entry point is that of the corresponding lazy PLT entry address.  The
+function descriptor's GOT address is initialized to the GOT address
+for the load module itself.  These initializations occur as the result
+of the dynamic linker performing R_ARM_FUNCDESC_VALUE relocations
+(located in the .rel.plt section) at load time.
+
+Thus a function call to an unresolved function will go through the
+lazy PLT fragment for that function as a result of picking up the lazy
+PLT entry point from the function descriptor.  The lazy PLT fragment
+immediately branches to "resolverStub", a special PLT entry which
+uses the dynamic linker reserve area (see above) to cause execution to
+be transferred to the actual resolver without disturbing either TODO
+or R9.  Branches always go to PLT entries, not directly to the
+resolver stubs.
+
+Upon entry to the actual (lazy) resolver, the following register
+values are important:
+
+    TODO      -- the address of the resolver itself
+    TODO      -- the GOT address (FDPIC value) for the resolver's GOT
+    TODO(R1)      -- the address of the lazy PLT entry being resolved
+    R9      -- the GOT address for the caller's GOT
+               or sometimes for the called function's GOT (see below)
+
+The resolver must take care not to modify the argument registers or
+the callee-saved registers, or if it does, to restore them to their
+original state when it's done.
+
+The resolver uses the word at TODO(R1) - 4 (that is @(-4,TODO(R1)) ) which is
+an offset to a R_ARM_FUNCDESC_VALUE relocation.  This offset is
+relative to the value (address) associated with the DT_JMPREL tag in
+the dynamic section.  (Tags related to DT_JMPREL are DT_PLTRELSZ and
+DT_PLTREL.  The value associated with DT_PLTRELSZ provides the size of
+this section.  The value associated with DT_PLTREL must be set to
+DT_REL indicating that Elf32_Rel structs are used to hold the
+relocation information.)  The R_ARM_FUNCDESC_VALUE relocation provides
+the offset to the function descriptor to update and the symbol table
+index of the function to resolve.
+
+Assuming the resolver completes successfully, it will perform the
+following actions prior to transferring control to the entry point of
+the resolved function:
+
+    1) Fill in the function descriptor in the caller's GOT so that the
+       entry point and GOT address are correct for the next call of
+       the resolved function.  As in the Blackfin and SH FDPIC ABI, there is
+       a race condition between both words getting written and some
+       other thread attempting to read them, and no atomic 64 bit
+       load/store instruction that could be used to prevent it.  To
+       avoid problems arising from this race, when function
+       descriptors are read the entry point must be read before the
+       FDPIC pointer, and when the resolver writes them it must write
+       the new FDPIC pointer before writing the new entry point.  This
+       leaves the possibility of a lazy PLT entry (and so the
+       resolver) being called with the FDPIC register pointing to the
+       GOT for the load module containing the called function instead
+       of the load module containing the call and GOT and PLT entries,
+       if the call is made after the resolver was interrupted between
+       updating the two words of the function descriptor; the resolver
+       must allow for this possibility.  In addition, the resolver may
+       need to use locking to ensure that two different threads are
+       not updating a function descriptor at the same time to point to
+       functions in two different load modules.
+
+    2) Set R9 to the GOT address of the resolvee's GOT.
+
