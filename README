@@ -1,0 +1,53 @@
+Introduction
+------------
+
+This document describes extensions (and some minor changes) to the
+existing ARM ELF ABI (as used on GNU/Linux) required to support the
+implementation of shared libraries on a system whose OS (and hardware)
+require that processes share a common address space.  This document
+will also attempt to explore the motivations behind and the
+implications of these extensions.
+
+One of the primary goals in using shared libraries is to reduce the
+memory requirements of the overall system.  Thus, if two processes use
+the same library, the hope is that at least some of the memory pages
+will be shared between the two processes resulting in an overall
+savings.  To realize these savings, tools used to build a program and
+library must identify which sections may be shared and which must not
+be shared.  The shared sections, when grouped together, are commonly
+referred to as the "text segment" whereas the non-shared (grouped)
+sections are commonly referred to as the "data segment".  The text
+segment is read-only and is usually comprised of executable code and
+read-only data.  The data segment must be writable and it is this fact
+which makes it non-sharable.
+
+Systems which utilize disjoint address spaces for its processes are
+free to group the text and data segments in such a way that they
+may always be loaded with fixed relative positions of the text
+and data segments.  I.e, for a given load object, the offset from
+the start of the text segment to the start of the data segment is
+constant.  This property greatly simplifies the design of the
+shared library machinery.
+
+The design of the shared library mechanism described in this document
+does not (and cannot) have this property.  Due to the fact that all
+processes share a common address space, the text and data segments
+will be placed at arbitrary locations relative to each other and will
+therefore need a mechanism whereby executable code will always be able
+to find its corresponding data.  One of the CPU's registers is
+typically dedicated to hold the base address of the data segment. 
+This register will be called the "FDPIC register" in this document. 
+Such a register is sometimes used in systems with disjoint address
+spaces too, but this is for efficiency rather than necessity.
+
+The fact that the locations of the text and data segments are at
+non-constant offsets with respect to each other also complicates
+function pointer representation.  As noted above, executable code
+must be able to find its corresponding data segment.  When making an
+indirect function call, it is therefore important that both the
+address of the function and the base address of the data segment are
+available.  This means that a function pointer needs to represented as
+the address of a "function descriptor" which contains the address of
+the actual code to execute as well as the corresponding data (FDPIC
+register) address.
+
