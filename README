@@ -425,3 +425,100 @@ be useful in this context.  When an existing relocation is applied to
 a function symbol, it is taken to refer to the function entry point
 (possibly a PLT entry), not to a function descriptor.
 
+New Relocations
+---------------
+
+The following are new relocation types for supporting position independent
+code with function descriptors.
+
+    Name                    Value  Meaning
+    ----                    -----  -------
+    R_ARM_FUNCDESC           TODO     Used for a pointer to an "official"
+                                    function descriptor, in both GOT
+                                    entries and user-initialized data.
+    R_ARM_FUNCDESC_VALUE     TODO    Used to fill in function entry point
+                                   and GOT address in private function
+                                   descriptors
+
+The dynamic loader needs to adjust or "fix up" portions of the data
+segment due to it being dynamically located.  The various dynamic
+relocation entries tell the dynamic loader how to do this.  The text
+segment is dynamically located too, but it is read-only and must not
+have any relocation entries associated with it.
+
+New dynamic relocations have the following types: R_ARM_FUNCDESC and
+R_ARM_FUNCDESC_VALUE.  The precise interpretation given to these
+relocation types by the dynamic linker is described in the following
+paragraphs.
+
+  R_ARM_FUNCDESC
+  --------------
+    The R_ARM_FUNCDESC relocation is used to obtain the address of an
+    "official" function descriptor from the dynamic linker.  The
+    "r_offset" field contains the location (offset) of the word
+    which must receive this address.  The "r_info" field contains an
+    encoding of the symbol table index corresponding to the function
+    to resolve.  The dynamic linker resolves the function and
+    determines the address of the corresponding official descriptor,
+    allocating and initializing it as necessary.  (It is the dynamic
+    linker's responsibility to allocate and initialize all official
+    descriptors.)  The address of the official descriptor is written to
+    the location specified by "r_offset".
+
+    Note: This relocation is always expected to reference symbols for
+    which the dynamic linker is expected to create an "official
+    descriptor".  References to descriptors (for static or hidden
+    functions) which are allocated and initialized by the link editor
+    are handled via pre-existing relocations.
+
+  R_ARM_FUNCDESC_VALUE
+  --------------------
+    The R_ARM_FUNCDESC_VALUE relocation is used to initialize
+    both words of a function descriptor.  The "r_offset" member (in
+    an Elf32_Rel struct) specifies the location of the descriptor to
+    initialize.  The "r_info" member encodes both the number
+    associated with the R_ARM_FUNCDESC_VALUE type and a symbol table
+    index.
+
+    Support for lazy binding is accomplished by R_ARM_FUNCDESC_VALUE
+    relocations residing in the .rel.plt section.  The symbol index
+    encoded in "r_info" corresponds to the symbol to resolve.  In
+    the descriptor itself, the link editor sets the low word to the
+    address of the lazy PLT entry which, when executed, will ultimately
+    resolve the symbol.  The high word is set to the index of the
+    segment containing the lazy PLT code.  Relocations in .rel.plt are
+    potentially processed twice, once at load time to fix up the
+    offset so that the function descriptor really points at the lazy
+    PLT entry, and possibly later on, as a result of the code in the
+    lazy PLT entry being run, forcing actual binding to be done. 
+    Note:  The environment variable "LD_BIND_NOW" may be set to a
+    non-null value to force binding to occur at load time.  When
+    "LD_BIND_NOW" is used for this purpose, the descriptor's
+    contents are ignored, and the relocations are only processed
+    once.
+
+    R_ARM_FUNCDESC_VALUE relocations found outside of .rel.plt are
+    used either for non-lazy binding support (forced at compile/link
+    time) or for static function descriptor initializations.  These
+    cases will be considered separately.
+    
+    Relocations used for resolving external functions (in a non-lazy
+    manner) have the symbol index encoded in "r_info" set to
+    correspond to symbol to resolve.  The descriptor contents are
+    irrelevant and are ignored.  The function corresponding to the
+    symbol index is resolved and the entry point and GOT address
+    for that function are written to the descriptor.
+
+    The R_ARM_FUNCDESC_VALUE relocation is also used to initialize
+    function descriptors used as addresses for static, non-overridable
+    functions.  When used for this purpose, the "r_info" member encodes
+    the symbol table index for the section in which the function is
+    found.  The low word of the descriptor contains the offset to the
+    function and the high word contains the segment index.
+
+    The segment index can be used to speed up the computation of the
+    address of the symbol, if the dynamic linker maintains internally
+    an array that maps a segment number to the offset by which it was
+    relocated.  Such a map is not required, though, and the dynamic
+    linker is free to ignore segment index information.
+
