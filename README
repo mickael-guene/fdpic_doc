@@ -285,3 +285,40 @@ the resolved function:
 
     2) Set R9 to the GOT address of the resolvee's GOT.
 
+Function Calls
+--------------
+
+Direct function calls are performed as follows:
+
+                "set up arguments as on GNU/Linux with MMU"
+                "load function address into a register"
+                "call loaded address"
+                "restore any needed "caller saves" registers"
+
+The "call loaded address" pseudo-instruction will either transfer
+control directly to the function's entry point (for calls to functions
+in the same load module) or will transfer control to the function's
+PLT entry if one is needed.
+
+Since PLT entries reference R9, a function must ensure that R9
+is set correctly prior to making a function call.
+
+Inlined PLT code may be able to make use of the FDPIC value stored in
+another register - thus avoiding the need for setting R9.  However,
+it would significantly enlarge the code size.
+
+Indirect calls are performed by loading the entry point and GOT
+address from the function descriptor into R(TODO) and R9, respectively.
+The same atomicity issues apply as when these are loaded from a PLT
+entry, so again the entry point address must be loaded first.  Control
+is transferred via a jsr(TODO) or jsr/n(TODO) instruction to the function's entry
+point, possibly a lazy PLT fragment.  The call site for an indirect
+function call might look like this:
+
+                "set up arguments as on GNU/Linux with MMU"
+                "load function descriptor address into a register"
+                "load entry point and GOT address from function descriptor"
+                 into R(TODO) and R9"
+                "call loaded entry point"
+                "restore any needed "caller saves" registers"
+
