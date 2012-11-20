@@ -322,3 +322,97 @@ function call might look like this:
                 "call loaded entry point"
                 "restore any needed "caller saves" registers"
 
+Global Data and the Global Offset Table (GOT)
+---------------------------------------------
+
+As noted earlier, position independent code must not contain any
+instruction sequences which directly encode a reference to global
+data.  If they did so, load time relocations would be necessary to
+adjust these addresses.  Also, any reference to a address in a
+non-shared segment would force the executable segment in question to
+be non-sharable.
+
+The global offset table (GOT) contains words which hold the
+addresses of global data.  In order to access these global data,
+position independent code must first use an FDPIC-relative load
+instruction to fetch the data address from the GOT.
+The data structure is then accessed as necessary using the address
+obtained from the GOT.  It is envisioned that the various GOT
+related structures might look something like this:
+
+                +-----------------------+ <--------------------\
+                |          .            |                      |
+                           .                                   |
+                |          .            |                      |
+                +-----------------------+                      |
+                |                       |                      |
+                +-    Func Descr #2    -+                      |
+                |                       |                      |
+                +-----------------------+                      |
+                |                       |                      |
+                +-    Func Descr #1    -+                      |
+                |                       |                      |
+                +-----------------------+ <---\                |
+   FDPIC -----> |                       |     |                |
+                +- Resolver Descriptor -+   Dynamic Linker     |
+                |                       |   Reserve Area       |
+                +-----------------------+     |                |
+                |   link_map pointer    |     |                |
+                +-----------------------+ <---/             Global
+                | Global Data Addr #1   |                   Offset
+                +-----------------------+                   Table
+                | Global Data Addr #2   |                   (GOT)
+                +-----------------------+                      |
+                | Global Data Addr #3   |                      |
+                +-----------------------+                      |
+                |          .            |                      |
+                           .                                   |
+                |          .            |                      |
+                +-----------------------+ <--------------------/
+
+The link-editor is responsible for determining the precise layout
+of the GOT.  The only hard requirements are the following:
+
+    (a) FDPIC must point at the first word of the dynamic linker
+        reserve area.
+    (b) The global offset table must reside in a non-shared segment.
+
+In the picture above, function descriptors are placed at negative
+offsets relative to R9 and the GOT data address entries are placed at
+positive offsets relative to R9.  The link editor is free to place
+either the function descriptors at positive offsets (subject to
+alignment constraints) or the data address entries at negative
+offsets.  Also, note that there is no requirement that the function
+descriptors or data address entries have any particular grouping.
+
+GOT initialization is performed at load time by the dynamic linker.
+In order to accomplish these initializations, the dynamic linker uses
+relocations that have been placed in the object file by the link
+editor.  These relocations (as already defined for non-FDPIC) may
+cause addresses of other global data in other load modules to be
+resolved or the relocation may refer to data within the same load
+module.  (For function descriptors, the R_ARM_FUNCDESC_VALUE relocation
+is used.  This relocation is described in greater detail below.)
+
+Each load module has a symbol _GLOBAL_OFFSET_TABLE_ which resolves to
+the GOT address for that load module.  The DT_PLTGOT dynamic section
+entry in each load module contains the GOT address also.  The GOT
+address points to the dynamic linker reserve area.
+
+TODO ==>
+HERE describe access to global data according to sections
+HERE a travailler rapidement car important
+
+The simplest way to load the address of a data object, on all SH
+variants, is:
+
+        mov.l .L1, r0
+        mov.l @(r0,r12), rN
+
+    L1: .long foo@GOT
+TODO <==
+
+Variables initialized with pointers (to data or code) must not be
+assigned to read-only segments; the dynamic linker will need to set up
+the pointers at module load time.
+
