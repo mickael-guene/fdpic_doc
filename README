@@ -140,3 +140,25 @@ Each private function descriptor needs to be initialized using a
 address.  The R_ARM_FUNCDESC_VALUE relocation is used for this
 purpose.
 
+Function Addresses
+------------------
+
+When a function address is required, the address of an "official" (or
+canonical) function descriptor is used.  Descriptors corresponding to
+static, non-overridable functions are allocated by the link editor
+and are initialized at load time via the R_ARM_FUNCDESC_VALUE relocation.
+The dynamic linker is responsible for allocating and initializing all
+other "official" function descriptors.
+
+As described above, a function's address is actually the address of a
+function descriptor, not that of the function's entry point.  As is
+the case with other kinds of pointers, executable code obtains the
+values of pointer constants via the global offset table.  The
+R_ARM_FUNCDESC relocation (see below) is used in global offset table
+entries and initialized data to obtain the addresses of function
+descriptors used for representing function addresses.
+
+Note: This document borrows many of the concepts and terminology
+related to function addresses and their descriptors from the IA-64
+System V ABI [1, 2].
+
