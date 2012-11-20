@@ -51,3 +51,54 @@ the address of a "function descriptor" which contains the address of
 the actual code to execute as well as the corresponding data (FDPIC
 register) address.
 
+FDPIC Register
+--------------
+
+The FDPIC register is used as a base register for accessing the global
+offset table (GOT) and function descriptors.  Since both code and data
+are relocatable, executable code may not contain any instruction
+sequences which directly encode a pointer's value.  Instead, pointers
+to global data are indirectly referenced via the global offset table. 
+At load time, pointers contained in the global offset table are
+relocated by the dynamic linker to point at the correct locations.
+
+Register R9 is used as the FDPIC register; in this specification it
+is caller-save, not callee-save, to avoid problems with PLT entries
+needing to save the register.
+
+Upon entry to a function, the caller saved register R9 is the FDPIC
+register.  As described above, it contains the GOT address for that
+function.  R9 obtains its value in one of three ways:
+
+    1) By being inherited from the calling function in the case
+       of a direct call to a function within the same load module.
+
+    2) By being set either in a PLT entry or in inlined PLT code.
+
+    3) By being set from a function descriptor as part of an
+       indirect call.
+
+The specifics associated with each of these cases are covered in
+greater detail in "Procedure Linkage Table (PLT)" and "Function
+Calls", below.
+
+The prologue code of a non-leaf function should save R9 either on
+the stack or in one of the callee-saved registers.  After each
+function call, R9 must be restored if it is needed later on in the
+function.  Direct calls to functions in the same load module and
+direct calls which are routed through a PLT entry require that R9 be
+restored.  Calls which use inlined PLT code and indirect calls may be
+able to avoid using R9; such calls will need to use some other
+register in which the GOT address has been saved, however.  A leaf
+function makes no calls and need not save R9.
+
+Note that once a function has moved R9 to one of its callee saved
+registers, the function is then free to use that register as the FDPIC
+register for accessing data.  This is why the sections describing
+relocations are careful to specify FDPIC-relative references instead
+of R9-relative references.
+
+It's envisioned (though not mandated) that the GOT entries are located
+at positive FDPIC-based offsets and that function descriptors are
+found at negative offsets to FDPIC.
+
