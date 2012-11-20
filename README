@@ -102,3 +102,41 @@ It's envisioned (though not mandated) that the GOT entries are located
 at positive FDPIC-based offsets and that function descriptors are
 found at negative offsets to FDPIC.
 
+Function Descriptors
+--------------------
+
+A number of programs assume that pointers to functions are as wide as
+pointers to data, even though programming languages don't require
+this.  However, two words are needed to represent a function pointer
+meaningfully:  not only is the function's entry point required, but
+also some context information that enables the function to find the
+corresponding data segment in the current process.  Such context
+information is given in the form of a pointer to the GOT in FDPIC
+(which is R9 upon entry to a function).
+
+In order to keep pointers to functions as 32-bit values, while adding
+context information to them, we introduce function descriptors, such
+that, when the address of a function is taken, the address of its
+descriptor is obtained.  As shown below, the descriptor contains
+pointers to both the function's entry point and its GOT.  A load
+module will also likely contain a number of private function
+descriptors which are used in conjunction with a corresponding PLT
+entry (or inlined PLT code) for calling a function.
+
+A function descriptor consists of two 4-byte words:
+
+    1) The "entry point" at offset 0 contains the text address of the
+       function.  This is the address at which to start executing
+       the function.
+
+    2) The "GOT address" at offset 4 contains the value to which the FDPIC
+       register must be set when executing the function.
+
+Each direct function call requiring a PLT entry (or which uses inlined
+PLT code) requires a function descriptor stored in the data segment.
+
+Each private function descriptor needs to be initialized using a
+64-bit relocation which fills in both the function entry point and GOT
+address.  The R_ARM_FUNCDESC_VALUE relocation is used for this
+purpose.
+
