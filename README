@@ -178,3 +178,13 @@ instructions in a PLT entry could look like this:
 
 TBD
 
+Dynamic Linker Reserve Area
+---------------------------
+
+The linker reserves three words starting at the location pointed to by
+the FDPIC register for use by the dynamic linker.  The first two words
+comprise a function descriptor for invoking the resolver used in lazy
+dynamic linking.  The third (at R9+8) is used by the dynamic linker
+and the debugger to obtain access to information regarding the loaded
+module and the amount that each segment has been relocated by.
+
