@@ -403,18 +403,54 @@ the GOT address for that load module.  The DT_PLTGOT dynamic section
 entry in each load module contains the GOT address also.  The GOT
 address points to the dynamic linker reserve area.
 
-TODO ==>
-HERE describe access to global data according to sections
-HERE a travailler rapidement car important
-
-The simplest way to load the address of a data object, on all SH
+The simplest way to load the address of a data object, on all ARM
 variants, is:
 
-        mov.l .L1, r0
-        mov.l @(r0,r12), rN
+        ldr     r0, .L1
+        ldr     rN, [r9, r0]
+    L1: .word foo@GOT
 
-    L1: .long foo@GOT
-TODO <==
+If data symbol bar is known to be local to the translation unit, or to
+have internal, hidden or protected (but not global) visibility,
+different sequences can be used that assume the symbol to be located
+at a fixed offset within the text or data segments.  These sequences
+avoid the need for a GOT entry for bar.  If the symbol is known to be
+in the .data section, the following sequence computes the address of
+bar:
+
+        ldr     rN, .L1
+        add     rN, rN, r9
+    L1: .word bar@GOTOFF
+
+If the symbol is known to be in the .rodata section PC relative access
+can be done.
+
+        ldr     rN, .L1
+    LPIC1:
+        add     rN, pc, rN
+    L1: .word bar-(.LPIC1+8)
+
+Taking the address of a function descriptor can be accomplished with
+the following sequences:
+
+        ldr     r0, .L1
+        ldr     rN, [r9, r0]
+    L1: .word foo@GOTFUNCDESC
+
+If the function is local to a translation unit, or is known to have
+internal or hidden (but not protected or global) visibility, the
+canonical function descriptor of the function will be in the module,
+so it is possible to avoid the need for a GOT entry containing the
+address of the function descriptor, by using code sequences like:
+
+        ldr     rN, .L1
+        add     rN, rN, r9
+    L1: .word foo@GOTOFFFUNCDESC
+
+Global-scope variable initialized with a pointer to a function causes
+code like this to be generated:
+
+bar:    .word foo@FUNCDESC
 
 Variables initialized with pointers (to data or code) must not be
 assigned to read-only segments; the dynamic linker will need to set up
@@ -441,6 +477,8 @@ code with function descriptors.
                                     to a GOT entry containing a
                                     pointer to a function descriptor
                                     for a symbol.
+    R_ARM_GOTOFFFUNCDESC    TODO   Used for the FDPIC-relative offset
+                                    to the function descriptor itself.
     R_ARM_FUNCDESC          TODO   Used for a pointer to an "official"
                                     function descriptor, in both GOT
                                     entries and user-initialized data.
@@ -539,7 +577,8 @@ Below is a list of additional operators for writing assembly code.
     ----                -------------------------
 
     @GOTFUNCDESC        R_ARM_GOTFUNCDESC
-    TODO
+    @GOTOFFFUNCDESC     R_ARM_GOTOFFFUNCDESC
+    @FUNCDESC           R_ARM_FUNCDESC
 
 ELF Header
 ----------
