@@ -522,3 +522,13 @@ paragraphs.
     relocated.  Such a map is not required, though, and the dynamic
     linker is free to ignore segment index information.
 
+Assembler operators
+-------------------
+
+Below is a list of additional operators for writing assembly code.
+
+    Name                Corresponding relocations
+    ----                -------------------------
+
+    TODO
+
