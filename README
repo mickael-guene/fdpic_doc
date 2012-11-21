@@ -174,9 +174,12 @@ the function in question.  The function descriptor will be located at
 a fixed offset from the address specified by the FDPIC register.  The
 instructions in a PLT entry could look like this:
 
-        plt(foo):       TBD
-
-TBD
+        plt(foo):       ldr     r12, .L1
+                        add     r12, r12, r9
+                        ldr     r9, [r12, #4]
+                        ldr     r12, [r12]
+                        bx      r12
+        L1.             .word   foo@GOTOFFFUNCDESC
 
 Dynamic Linker Reserve Area
 ---------------------------
@@ -433,12 +436,16 @@ code with function descriptors.
 
     Name                    Value  Meaning
     ----                    -----  -------
-    R_ARM_FUNCDESC           TODO     Used for a pointer to an "official"
+    R_ARM_GOTFUNCDESC       TODO   Used for the FDPIC-relative offset
+                                    to a GOT entry containing a
+                                    pointer to a function descriptor
+                                    for a symbol.
+    R_ARM_FUNCDESC          TODO   Used for a pointer to an "official"
                                     function descriptor, in both GOT
                                     entries and user-initialized data.
-    R_ARM_FUNCDESC_VALUE     TODO    Used to fill in function entry point
-                                   and GOT address in private function
-                                   descriptors
+    R_ARM_FUNCDESC_VALUE    TODO   Used to fill in function entry point
+                                    and GOT address in private function
+                                    descriptors
 
 The dynamic loader needs to adjust or "fix up" portions of the data
 segment due to it being dynamically located.  The various dynamic
@@ -530,6 +537,7 @@ Below is a list of additional operators for writing assembly code.
     Name                Corresponding relocations
     ----                -------------------------
 
+    @GOTFUNCDESC        R_ARM_GOTFUNCDESC
     TODO
 
 ELF Header
