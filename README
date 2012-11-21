@@ -532,3 +532,21 @@ Below is a list of additional operators for writing assembly code.
 
     TODO
 
+ELF Header
+----------
+
+The ARM processor specific flag for the "e_flags" field in the ELF
+header which indicates the use of this ABI is EF_ARM_FDPIC.  The value
+for this flag is 0x00008000(TODO).  A flag EF_ARM_PIC, value 0x00000100(TODO), is
+also defined.
+
+When both EF_ARM_FDPIC and EF_ARM_PIC are set, it means each segment of
+the binary can be loaded at an arbitrary address, which means sharing
+of text segments is possible.  If EF_ARM_FDPIC is set but EF_ARM_PIC is
+clear, all segments must be relocated by the same amount.  The linker
+should warn and clear EF_ARM_PIC when linking FDPIC binaries if it
+finds any inter-segment relocation, and set it otherwise.  Examples of
+inter-segment relocations are a PC-relative relocation referencing a
+symbol that is not in the text segment, or a GOTOFF relocation
+referencing a symbol that is not in the data segment.
+
