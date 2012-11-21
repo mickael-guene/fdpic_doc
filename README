@@ -192,6 +192,8 @@ module and the amount that each segment has been relocated by.
 
 Lazy Procedure Linkage
 ----------------------
+TODO : MEGA WARNING : lazy linking must use memory barrier to insure order =>
+plt must use memory barrier ......
 
 Lazy procedure linkage requires an additional PLT fragment for each
 dynamic function that requires a local descriptor in the module.
