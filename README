@@ -177,8 +177,7 @@ instructions in a PLT entry could look like this:
         plt(foo):       ldr     r12, .L1
                         add     r12, r12, r9
                         ldr     r9, [r12, #4]
-                        ldr     r12, [r12]
-                        bx      r12
+                        ldr     pc, [r12]
         L1.             .word   foo@GOTOFFFUNCDESC
 
 Dynamic Linker Reserve Area
