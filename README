@@ -295,8 +295,7 @@ Function Calls
 Direct function calls are performed as follows:
 
                 "set up arguments as on GNU/Linux with MMU"
-                "load function address into a register"
-                "call loaded address"
+                bl foo
                 "restore any needed "caller saves" registers"
 
 The "call loaded address" pseudo-instruction will either transfer
@@ -321,9 +320,9 @@ function call might look like this:
 
                 "set up arguments as on GNU/Linux with MMU"
                 "load function descriptor address into a register"
-                "load entry point and GOT address from function descriptor"
+                "load entry point and GOT address from function descriptor
                  into R(TODO) and R9"
-                "call loaded entry point"
+                blx R(TODO)
                 "restore any needed "caller saves" registers"
 
 Global Data and the Global Offset Table (GOT)
