@@ -311,18 +311,18 @@ another register - thus avoiding the need for setting R9.  However,
 it would significantly enlarge the code size.
 
 Indirect calls are performed by loading the entry point and GOT
-address from the function descriptor into R(TODO) and R9, respectively.
+address from the function descriptor into R8 and R9, respectively.
 The same atomicity issues apply as when these are loaded from a PLT
 entry, so again the entry point address must be loaded first.  Control
-is transferred via a jsr(TODO) or jsr/n(TODO) instruction to the function's entry
+is transferred via a blx instruction to the function's entry
 point, possibly a lazy PLT fragment.  The call site for an indirect
 function call might look like this:
 
                 "set up arguments as on GNU/Linux with MMU"
                 "load function descriptor address into a register"
                 "load entry point and GOT address from function descriptor
-                 into R(TODO) and R9"
-                blx R(TODO)
+                 into R8 and R9"
+                 blx R8
                 "restore any needed "caller saves" registers"
 
 Global Data and the Global Offset Table (GOT)
