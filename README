@@ -584,7 +584,7 @@ ELF Header
 
 The ARM processor specific flag for the "e_flags" field in the ELF
 header which indicates the use of this ABI is EF_ARM_FDPIC.  The value
-for this flag is 0x00008000(TODO).  A flag EF_ARM_PIC, value 0x00000100(TODO), is
+for this flag is 0x00001000.  A flag EF_ARM_PIC, value 0x00000020, is
 also defined.
 
 When both EF_ARM_FDPIC and EF_ARM_PIC are set, it means each segment of
