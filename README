@@ -597,3 +597,104 @@ inter-segment relocations are a PC-relative relocation referencing a
 symbol that is not in the text segment, or a GOTOFF relocation
 referencing a symbol that is not in the data segment.
 
+Start up
+--------
+
+At the program's entry point, the stack pointer must be set to an
+address close to the end of the stack segment.  The size of the stack
+segment is specified by the PT_GNU_STACK program header, and is
+derived from the value of the symbol __stacksize, that can be defined
+to an absolute value when linking a program.  The default stack size
+is 128Kb.  Starting at the address pointed to by sp, the program
+should be able to find its arguments, environment variables, and
+auxiliary vector table and load maps.  Here's what the stack looks like:
+
+  sp:		argc
+  sp+4:		argv[0]
+  ...
+  sp+4*argc:	argv[argc-1]
+  sp+4+4*argc:	NULL
+  sp+8+4*argc:	envp[0]
+  ...
+        NULL
+
+The NULL terminator of envp is immediately followed by the Auxiliary
+Vector Table.  Each entry is a pair of words, the first being an entry
+type, the second being either an integer value or a pointer.  An entry
+type of value zero (AT_NULL) marks the end of the auxiliary vector.
+
+Load maps go somewhere on the stack.  They use the following data
+structure:
+
+struct elf32_fdpic_loadmap {
+  /* Protocol version number, must be zero.  */
+  Elf32_Half version;
+  /* Number of segments in this map.  */
+  Elf32_Half nsegs;
+  /* The actual memory map.  */
+  struct elf32_fdpic_loadseg segs[/*nsegs*/];
+};
+
+/* This data structure represents a PT_LOAD segment.  */
+struct elf32_fdpic_loadseg
+{
+  /* Core address to which the segment is mapped.  */
+  Elf32_Addr addr;
+  /* VMA recorded in the program header.  */
+  Elf32_Addr p_vaddr;
+  /* Size of this segment in memory.  */
+  Elf32_Word p_memsz;
+};
+
+At program start-up, register r8(TODO) should hold a pointer to a struct
+elf32_fdpic_loadmap that describes where the kernel mapped each of the
+PT_LOAD segments of the executable.  At start-up of an interpreter for
+another program (e.g., ld.so), r9(TODO) will be set to the load map of the
+interpreter, and r10(TODO) will be set to a pointer to the PT_DYNAMIC
+section of the interpreter, if it was mapped as part of any loadable
+segment, or 0 otherwise.  In the absence of an interpreter, r9(TODO) will be
+0, and r10(TODO) will be the main program's PT_DYNAMIC address.  All other
+callee-saved registers are supposed to be initialized to 0 by the
+kernel before it transfers control to userland, but applications
+shouldn't rely on this (except for r11(TODO), see below) since future
+extensions of the ABI may assign other meanings to these registers.
+Caller-saved registers have indeterminate value.
+
+Both static and dynamic executables are responsible for
+self-relocating and initializing the PIC register.  Self-relocation is
+accomplished by adjusting, according to the link map stored in r8(TODO),
+every pointer in the range [__ROFIXUP_LIST__,__ROFIXUP_END__-4).  The
+addresses of __ROFIXUP_LIST__ and __ROFIXUP_END__ can be computed by
+means of PC-relative addressing, since they are known to be in the
+text segment.
+
+The pointers in the .rofixup section are created by the linker; FDPIC
+object files should not contain .rofixup sections.  The linker emits
+rofixup entries in static or dynamic executables that are not linked
+with -pie wherever it would emit a dynamic relocation in PIEs or
+dynamic libraries.
+
+The linker also emits, as the last entry of the .rofixup section, the
+value of the _GLOBAL_OFFSET_TABLE_ symbol.  The code that performs
+self-relocation should not dereference this last entry to relocate its
+contents; instead, it should simply compute the relocated value of the
+entry itself, thus obtaining the PIC register value without using any
+non-PIC or inter-segment relocation, that would force the executable
+to relocate as a unit.
+
+In case a dynamic loader is used, it may set r11(TODO) to the address of a
+function descriptor that represents a function to be called at program
+termination time.  The dynamic loader, however, must not depend on
+this function being called for proper termination.
+
+The dynamic loader may change the stack pointer such that it is not
+aligned to a double-word boundary, but rather to a single-word
+boundary.  It is recommended that every program's start up code
+adjusts the stack pointer after obtaining the program arguments from
+the top of the stack.
+
+Chunks of code inserted in .init and .fini sections (_init and _fini
+functions, respectively) must not assume r9 to hold the value of the
+PIC register.  _init and _fini prologues are expected to save the
+initial r9 at @(fp,4), and the initial lr at @(fp,8).
+
