@@ -646,23 +646,23 @@ struct elf32_fdpic_loadseg
   Elf32_Word p_memsz;
 };
 
-At program start-up, register r8(TODO) should hold a pointer to a struct
+At program start-up, register r7 should hold a pointer to a struct
 elf32_fdpic_loadmap that describes where the kernel mapped each of the
 PT_LOAD segments of the executable.  At start-up of an interpreter for
-another program (e.g., ld.so), r9(TODO) will be set to the load map of the
-interpreter, and r10(TODO) will be set to a pointer to the PT_DYNAMIC
+another program (e.g., ld.so), r8 will be set to the load map of the
+interpreter, and r9 will be set to a pointer to the PT_DYNAMIC
 section of the interpreter, if it was mapped as part of any loadable
-segment, or 0 otherwise.  In the absence of an interpreter, r9(TODO) will be
-0, and r10(TODO) will be the main program's PT_DYNAMIC address.  All other
+segment, or 0 otherwise.  In the absence of an interpreter, r8 will be
+0, and r9 will be the main program's PT_DYNAMIC address.  All other
 callee-saved registers are supposed to be initialized to 0 by the
 kernel before it transfers control to userland, but applications
-shouldn't rely on this (except for r11(TODO), see below) since future
+shouldn't rely on this (except for r10, see below) since future
 extensions of the ABI may assign other meanings to these registers.
 Caller-saved registers have indeterminate value.
 
 Both static and dynamic executables are responsible for
 self-relocating and initializing the PIC register.  Self-relocation is
-accomplished by adjusting, according to the link map stored in r8(TODO),
+accomplished by adjusting, according to the link map stored in r7,
 every pointer in the range [__ROFIXUP_LIST__,__ROFIXUP_END__-4).  The
 addresses of __ROFIXUP_LIST__ and __ROFIXUP_END__ can be computed by
 means of PC-relative addressing, since they are known to be in the
@@ -682,17 +682,12 @@ entry itself, thus obtaining the PIC register value without using any
 non-PIC or inter-segment relocation, that would force the executable
 to relocate as a unit.
 
-In case a dynamic loader is used, it may set r11(TODO) to the address of a
+In case a dynamic loader is used, it may set r10 to the address of a
 function descriptor that represents a function to be called at program
 termination time.  The dynamic loader, however, must not depend on
 this function being called for proper termination.
 
-The dynamic loader may change the stack pointer such that it is not
-aligned to a double-word boundary, but rather to a single-word
-boundary.  It is recommended that every program's start up code
-adjusts the stack pointer after obtaining the program arguments from
-the top of the stack.
-
+/* TODO : Section below is not clear for me .... */
 Chunks of code inserted in .init and .fini sections (_init and _fini
 functions, respectively) must not assume r9 to hold the value of the
 PIC register.  _init and _fini prologues are expected to save the
