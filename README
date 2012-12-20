@@ -554,6 +554,7 @@ paragraphs.
     symbol index is resolved and the entry point and GOT address
     for that function are written to the descriptor.
 
+#if 0
     The R_ARM_FUNCDESC_VALUE relocation is also used to initialize
     function descriptors used as addresses for static, non-overridable
     functions.  When used for this purpose, the "r_info" member encodes
@@ -566,6 +567,12 @@ paragraphs.
     an array that maps a segment number to the offset by which it was
     relocated.  Such a map is not required, though, and the dynamic
     linker is free to ignore segment index information.
+#else
+    The R_ARM_FUNCDESC_VALUE relocation is also used to initialize
+    function descriptors used as addresses for static, non-overridable
+    functions. When used for this purpose, the "r_info" encode the
+    value zero.
+#endif
 
 Assembler operators
 -------------------
