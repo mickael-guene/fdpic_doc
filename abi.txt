@@ -1,3 +1,7 @@
+ARM FDPIC ABI
+
+V0.4
+
 Introduction
 ------------
 
@@ -178,7 +182,7 @@ instructions in a PLT entry could look like this:
                         add     r12, r12, r9
                         ldr     r9, [r12, #4]
                         ldr     pc, [r12]
-        L1.             .word   foo@GOTOFFFUNCDESC
+        L1.             .word   foo(GOTOFFFUNCDESC)
 
 Dynamic Linker Reserve Area
 ---------------------------
@@ -192,8 +196,6 @@ module and the amount that each segment has been relocated by.
 
 Lazy Procedure Linkage
 ----------------------
-TODO : MEGA WARNING : lazy linking must use memory barrier to insure order =>
-plt must use memory barrier ......
 
 Lazy procedure linkage requires an additional PLT fragment for each
 dynamic function that requires a local descriptor in the module.
@@ -204,23 +206,11 @@ dynamic linker is mandatory, however.)
 
 A lazy PLT fragment looks like this:
 
-                        TODO
-        lazy_plt(foo):  TODO
-
-The code for "resolverStub" looks like this:
-
-        resolverStub:   TODO
-
-The link editor adds as many ``resolverStub'' fragments as necessary
-to ensure that the branch in each lazy PLT fragment is within range.
-
-It is also possible to inline the resolverStub instructions as
-follows:
-
-                        TODO
-        lazy_plt(foo):  TODO
-
-Lazy PLT fragments have word (32-bit) alignment.
+                        .word   funcdesc_value_reloc_offset(foo)
+        lazy_plt(foo):  ldr     r12, [pc, #-4?]
+                        push    r12
+                        ldr     r12, [r9, #4]
+                        ldr     pc, [r9]
 
 Function descriptors residing in the GOT are initialized so that the
 entry point is that of the corresponding lazy PLT entry address.  The
@@ -231,33 +221,28 @@ of the dynamic linker performing R_ARM_FUNCDESC_VALUE relocations
 
 Thus a function call to an unresolved function will go through the
 lazy PLT fragment for that function as a result of picking up the lazy
-PLT entry point from the function descriptor.  The lazy PLT fragment
-immediately branches to "resolverStub", a special PLT entry which
-uses the dynamic linker reserve area (see above) to cause execution to
-be transferred to the actual resolver without disturbing either TODO
-or R9.  Branches always go to PLT entries, not directly to the
-resolver stubs.
+PLT entry point from the function descriptor. The lazy PLT fragment
+will save on stack funcdesc_value_reloc_offset(foo) and then
+cause execution to be transferred to the actual resolver without
+disturbing R9.
 
 Upon entry to the actual (lazy) resolver, the following register
 values are important:
 
-    TODO      -- the address of the resolver itself
-    TODO      -- the GOT address (FDPIC value) for the resolver's GOT
-    TODO(R1)      -- the address of the lazy PLT entry being resolved
-    R9      -- the GOT address for the caller's GOT
-               or sometimes for the called function's GOT (see below)
+    R12       -- the GOT address (FDPIC value) for the resolver's GOT
+    SP[0]     -- funcdesc_value_reloc_offset(foo)
+    R9        -- the GOT address for the caller's GOT
 
 The resolver must take care not to modify the argument registers or
 the callee-saved registers, or if it does, to restore them to their
 original state when it's done.
 
-The resolver uses the word at TODO(R1) - 4 (that is @(-4,TODO(R1)) ) which is
-an offset to a R_ARM_FUNCDESC_VALUE relocation.  This offset is
-relative to the value (address) associated with the DT_JMPREL tag in
-the dynamic section.  (Tags related to DT_JMPREL are DT_PLTRELSZ and
-DT_PLTREL.  The value associated with DT_PLTRELSZ provides the size of
-this section.  The value associated with DT_PLTREL must be set to
-DT_REL indicating that Elf32_Rel structs are used to hold the
+The resolver uses the word SP[0] which is an offset to a R_ARM_FUNCDESC_VALUE
+relocation.  This offset is relative to the value (address) associated
+with the DT_JMPREL tag in the dynamic section.  (Tags related to DT_JMPREL
+are DT_PLTRELSZ and DT_PLTREL.  The value associated with DT_PLTRELSZ
+provides the size of this section.  The value associated with DT_PLTREL must
+be set to DT_REL indicating that Elf32_Rel structs are used to hold the
 relocation information.)  The R_ARM_FUNCDESC_VALUE relocation provides
 the offset to the function descriptor to update and the symbol table
 index of the function to resolve.
@@ -266,28 +251,17 @@ Assuming the resolver completes successfully, it will perform the
 following actions prior to transferring control to the entry point of
 the resolved function:
 
-    1) Fill in the function descriptor in the caller's GOT so that the
-       entry point and GOT address are correct for the next call of
-       the resolved function.  As in the Blackfin and SH FDPIC ABI, there is
-       a race condition between both words getting written and some
-       other thread attempting to read them, and no atomic 64 bit
-       load/store instruction that could be used to prevent it.  To
-       avoid problems arising from this race, when function
-       descriptors are read the entry point must be read before the
-       FDPIC pointer, and when the resolver writes them it must write
-       the new FDPIC pointer before writing the new entry point.  This
-       leaves the possibility of a lazy PLT entry (and so the
-       resolver) being called with the FDPIC register pointing to the
-       GOT for the load module containing the called function instead
-       of the load module containing the call and GOT and PLT entries,
-       if the call is made after the resolver was interrupted between
-       updating the two words of the function descriptor; the resolver
-       must allow for this possibility.  In addition, the resolver may
-       need to use locking to ensure that two different threads are
-       not updating a function descriptor at the same time to point to
-       functions in two different load modules.
+    1) Fill in the function descriptor in the caller's GOT so that
+       the entry point and GOT address are correct for the next call
+       of the resolved function
 
     2) Set R9 to the GOT address of the resolvee's GOT.
+
+VERY IMPORTANT NOTE :
+ Currently, there is a race condition between both words getting written and some
+other thread attempting to read them. The ARM does not have an atomic 64 bit
+load/store instruction that could be used to prevent it; it is recommended that
+threaded FDPIC applications run with the LD_BIND_NOW environment variable set.
 
 Function Calls
 --------------
@@ -311,18 +285,16 @@ another register - thus avoiding the need for setting R9.  However,
 it would significantly enlarge the code size.
 
 Indirect calls are performed by loading the entry point and GOT
-address from the function descriptor into R8 and R9, respectively.
-The same atomicity issues apply as when these are loaded from a PLT
-entry, so again the entry point address must be loaded first.  Control
-is transferred via a blx instruction to the function's entry
+address from the function descriptor into Ri and R9, respectively.
+Control is transferred via a blx instruction to the function's entry
 point, possibly a lazy PLT fragment.  The call site for an indirect
 function call might look like this:
 
                 "set up arguments as on GNU/Linux with MMU"
                 "load function descriptor address into a register"
                 "load entry point and GOT address from function descriptor
-                 into R8 and R9"
-                 blx R8
+                 into Ri and R9"
+                 blx Ri
                 "restore any needed "caller saves" registers"
 
 Global Data and the Global Offset Table (GOT)
@@ -407,7 +379,7 @@ variants, is:
 
         ldr     r0, .L1
         ldr     rN, [r9, r0]
-    L1: .word foo@GOT
+    L1: .word foo(GOT)
 
 If data symbol bar is known to be local to the translation unit, or to
 have internal, hidden or protected (but not global) visibility,
@@ -419,7 +391,7 @@ bar:
 
         ldr     rN, .L1
         add     rN, rN, r9
-    L1: .word bar@GOTOFF
+    L1: .word bar(GOTOFF)
 
 If the symbol is known to be in the .rodata section PC relative access
 can be done.
@@ -434,7 +406,7 @@ the following sequences:
 
         ldr     r0, .L1
         ldr     rN, [r9, r0]
-    L1: .word foo@GOTFUNCDESC
+    L1: .word foo(GOTFUNCDESC)
 
 If the function is local to a translation unit, or is known to have
 internal or hidden (but not protected or global) visibility, the
@@ -444,12 +416,12 @@ address of the function descriptor, by using code sequences like:
 
         ldr     rN, .L1
         add     rN, rN, r9
-    L1: .word foo@GOTOFFFUNCDESC
+    L1: .word foo(GOTOFFFUNCDESC)
 
 Global-scope variable initialized with a pointer to a function causes
 code like this to be generated:
 
-bar:    .word foo@FUNCDESC
+bar:    .word foo(FUNCDESC)
 
 Variables initialized with pointers (to data or code) must not be
 assigned to read-only segments; the dynamic linker will need to set up
@@ -472,16 +444,16 @@ code with function descriptors.
 
     Name                    Value  Meaning
     ----                    -----  -------
-    R_ARM_GOTFUNCDESC       TODO   Used for the FDPIC-relative offset
+    R_ARM_GOTFUNCDESC       161    Used for the FDPIC-relative offset
                                     to a GOT entry containing a
                                     pointer to a function descriptor
                                     for a symbol.
-    R_ARM_GOTOFFFUNCDESC    TODO   Used for the FDPIC-relative offset
+    R_ARM_GOTOFFFUNCDESC    162    Used for the FDPIC-relative offset
                                     to the function descriptor itself.
-    R_ARM_FUNCDESC          TODO   Used for a pointer to an "official"
+    R_ARM_FUNCDESC          163    Used for a pointer to an "official"
                                     function descriptor, in both GOT
                                     entries and user-initialized data.
-    R_ARM_FUNCDESC_VALUE    TODO   Used to fill in function entry point
+    R_ARM_FUNCDESC_VALUE    164    Used to fill in function entry point
                                     and GOT address in private function
                                     descriptors
 
@@ -531,9 +503,9 @@ paragraphs.
     the descriptor itself, the link editor sets the low word to the
     address of the lazy PLT entry which, when executed, will ultimately
     resolve the symbol.  The high word is set to the index of the
-    segment containing the lazy PLT code.  Relocations in .rel.plt are
-    potentially processed twice, once at load time to fix up the
-    offset so that the function descriptor really points at the lazy
+    segment containing the lazy PLT code or to value -1.  Relocations in
+    .rel.plt are potentially processed twice, once at load time to fix up
+    the offset so that the function descriptor really points at the lazy
     PLT entry, and possibly later on, as a result of the code in the
     lazy PLT entry being run, forcing actual binding to be done. 
     Note:  The environment variable "LD_BIND_NOW" may be set to a
@@ -554,25 +526,18 @@ paragraphs.
     symbol index is resolved and the entry point and GOT address
     for that function are written to the descriptor.
 
-#if 0
     The R_ARM_FUNCDESC_VALUE relocation is also used to initialize
     function descriptors used as addresses for static, non-overridable
     functions.  When used for this purpose, the "r_info" member encodes
     the symbol table index for the section in which the function is
     found.  The low word of the descriptor contains the offset to the
-    function and the high word contains the segment index.
+    function and the high word contains the segment index or value -1.
 
     The segment index can be used to speed up the computation of the
     address of the symbol, if the dynamic linker maintains internally
     an array that maps a segment number to the offset by which it was
     relocated.  Such a map is not required, though, and the dynamic
     linker is free to ignore segment index information.
-#else
-    The R_ARM_FUNCDESC_VALUE relocation is also used to initialize
-    function descriptors used as addresses for static, non-overridable
-    functions. When used for this purpose, the "r_info" encode the
-    value zero.
-#endif
 
 Assembler operators
 -------------------
@@ -582,9 +547,9 @@ Below is a list of additional operators for writing assembly code.
     Name                Corresponding relocations
     ----                -------------------------
 
-    @GOTFUNCDESC        R_ARM_GOTFUNCDESC
-    @GOTOFFFUNCDESC     R_ARM_GOTOFFFUNCDESC
-    @FUNCDESC           R_ARM_FUNCDESC
+    (GOTFUNCDESC)        R_ARM_GOTFUNCDESC
+    (GOTOFFFUNCDESC)     R_ARM_GOTOFFFUNCDESC
+    (FUNCDESC)           R_ARM_FUNCDESC
 
 ELF Header
 ----------
@@ -612,7 +577,7 @@ address close to the end of the stack segment.  The size of the stack
 segment is specified by the PT_GNU_STACK program header, and is
 derived from the value of the symbol __stacksize, that can be defined
 to an absolute value when linking a program.  The default stack size
-is 128Kb.  Starting at the address pointed to by sp, the program
+is 32Kb.  Starting at the address pointed to by sp, the program
 should be able to find its arguments, environment variables, and
 auxiliary vector table and load maps.  Here's what the stack looks like:
 
@@ -699,4 +664,255 @@ Chunks of code inserted in .init and .fini sections (_init and _fini
 functions, respectively) must not assume r9 to hold the value of the
 PIC register.  _init and _fini prologues are expected to save the
 initial r9 at @(fp,4), and the initial lr at @(fp,8).
+
+Debugger Support - Overview
+---------------------------
+
+Debugger support is substantially different from what is normally done
+on GNU/Linux for the following reasons:
+
+    1) The usual method for finding the dynamic linker data structures
+       won't work since the text and data area for the main program
+       itself are dynamically located.  Normally, the debugger is able
+       to find the address of the executable's sections by looking in
+       the executable itself.  This, in turn allows the debugger to
+       find the dynamic section in which it looks for the value of the
+       DT_DEBUG tag.  The DT_DEBUG value provides the debugger with
+       the address of the r_debug struct which, in turn, provides
+       access to the necessary relocation information for shared
+       objects.  But, since none of this will work, an alternate
+       method must be found for locating the dynamic linker data
+       structures.
+
+    2) The debugger must relocate different sections by different
+       amounts due to the fact that the text and data areas (and
+       perhaps other sections too) are relocated independently.
+       The dynamic linker's debug interface must allow the debugger
+       to find out how much each section has been relocated by.
+
+    3) It must be possible for the debugger to attach to a process at
+       an arbitrary point of its execution.
+
+    4) Text areas are truly shared among processes which means there
+       must be some sort of kernel level support for breakpoints.
+
+Debugger Support - Locating the Dynamic Linker's Data Structures
+----------------------------------------------------------------
+
+In a given process, for all possible values of FDPIC (which is in R9
+at function entry time), the word at FDPIC+8 - which is in the dynamic
+linker reserve area - contains a pointer to the dynamic linker's data
+structures.  This means that each data area for a shared library or
+the main executable in a given process contains a pointer to dynamic
+linker data structures describing the various load objects and their
+relocations.
+
+Unfortunately, R9 may not keep its value throughout the execution of
+a function.  It may be overwritten and used for any other computation.
+If it's needed again, it can be copied to another register or to a
+stack slot.  It might be possible for the debugger to locate the PIC
+value at such alternate locations by using call-frame debug
+information, but to do so, it would need the PC value as in the
+executable, not the relocated PC value in the memory location the
+kernel chose to map the text segment of the executable, or of any of
+the shared libraries it may have been linked with.
+
+To enable a debugger to find where an executable is located in memory,
+the initial load maps that the kernel passes to the program in R7
+and R8 are made available with ptrace calls, as described below:
+
+#define PTRACE_GETFDPIC  31 /* get the ELF fdpic loadmap address */
+
+#define PTRACE_GETFDPIC_EXEC ((void*)0) /* [addr] request the executable loadmap */
+#define PTRACE_GETFDPIC_INTERP ((void*)1) /* [addr] request the interpreter loadmap */
+
+struct elf32_fdpic_loadmap *x;
+ptrace (PTRACE_GETFDPIC, pid, PTRACE_GETFDPIC_EXEC /* or _INTERP */, &x);
+
+With these maps plus the executable (and/or interpreter) symbol table,
+the debugger can locate the program's GOT in memory, and thus obtain
+the link_map doubly-linked list (see below), from which it can obtain
+the loadmaps of all loaded modules.
+
+Obtaining r_debug requires the dynamic loader's link map and symbol
+tables only, to locate the _dl_debug_addr symbol defined in the
+dynamic loader.  If there is no dynamic loader, or if it hasn't got to
+the point at which it sets up the main program's GOT reserve area,
+r_debug won't be available.
+
+
+Debugger Support - Data structures
+----------------------------------
+
+The word at R9+8 is a pointer to a struct of the following form:
+
+  struct link_map {
+    /* These first few members are part of the protocol with the debugger.
+       This is the same format used in SVR4.  */
+
+    struct elf32_fdpic_loadaddr l_addr;
+    char *l_name;		/* Absolute file name object was found in.  */
+    ElfW(Dyn) *l_ld;		/* Dynamic section of the shared object.  */
+    struct link_map *l_next, *l_prev; /* Chain of loaded objects.  */
+  };
+
+Where l_addr's type definition is:
+
+  struct elf32_fdpic_loadaddr {
+    struct elf32_fdpic_loadmap *map;
+    void *got_value;
+  };
+
+(struct elf32_fdpic_loadaddr is the type of field dlpi_addr in struct
+ dl_phdr_info as well)
+
+_dl_debug_addr (a global symbol defined in the dynamic loader) is a
+pointer to the following type:
+
+  struct r_debug {
+    int r_version;		/* Version number for this protocol.  */
+
+    struct link_map *r_map;	/* Head of the chain of loaded objects.  */
+
+    /* This is the address of a function internal to the run-time linker,
+       that will always be called when the linker begins to map in a
+       library or unmap it, and again when the mapping change is complete.
+       The debugger can set a breakpoint at this address if it wants to
+       notice shared object mapping changes.  Being a pointer to a
+       function, it is actually a pointer to a function descriptor.  */
+    ElfW(Addr) r_brk;
+    enum
+      {
+	/* This state value describes the mapping change taking place when
+	   the "r_brk" address is called.  */
+	RT_CONSISTENT,		/* Mapping change is complete.  */
+	RT_ADD,			/* Beginning to add a new object.  */
+	RT_DELETE		/* Beginning to remove an object mapping.  */
+      } r_state;
+
+    ElfW(Addr) r_ldbase;	/* GOT pointer of the dynamic loader.  */
+  };
+
+The version number for this protocol will be 1.
+
+
+Debugger Support - Finding GOT Addresses
+----------------------------------------
+
+The field "got_value" in the link_map struct provides the debugger
+with the GOT address for all functions in the load module described by
+that link_map entry.
+
+Debugger Support - Breakpoint Considerations
+--------------------------------------------
+
+Debugger applications implement software breakpoints by causing a trap
+instruction to be written at the address at which a breakpoint is
+desired.  (The debugger will first fetch the contents of the location
+under consideration so that it may be restored when the breakpoint is
+removed.)
+
+In order to implement software breakpoints, the text sections for the
+process being debugged must reside in writable memory.  It is okay for
+the text section of non-debugged processes to reside in read-only
+memory, but some provision must be made to run a process being
+debugged in read/write memory.  Furthermore, this determination must
+be made at the time the process is started.  (Trying to migrate a
+running process from read-only to read/write memory would involve
+attempting to fix text section pointers on the stack, which is an
+impossible task without type information about each stack slot.)
+
+The solution (following the FR-V FDPIC ABI) we suggest the kernel to
+implement on non-MMU systems is the following: when a process that is
+being ptrace()d runs exec()s, the kernel will not share the text
+segment of the newly-exec()ed program, nor those of an interpreter it
+might require.  Also, the mmap() system call will not share text
+segments used by libraries of such a process, which it would normally
+do in response to the presence of MAP_EXECUTABLE and MAP_DENYWRITE in
+the flags passed to mmap().
+
+This arrangement will not make processes that the debugger attaches to
+after they are mapped in look like they have independent sets of
+breakpoints; they may just crash instead of they reach a breakpoint
+instruction set with ptrace for another process.  Enabling independent
+breakpoints in this case would require the kernel to monitor
+breakpoint installation with POKETEXT and arrange for such changes to
+code sections to only be visible while the affected process is
+running.  This was regarded to be a sufficiently uncommon case that we
+have decided to not penalize every context switch with the additional
+verifications that would have been needed to implement this solution.
+It remains as an optional feature of the kernel, but it is no longer
+mandated by the ABI.
+
+An alternative possibility would be a kernel ABI to insert
+breakpoints, with the kernel having responsibility to remove and
+replace them at context switches.
+
+Native Posix Thread Library support
+-------------------------------------------------
+
+To support NPTL three new static relocations are added, R_ARM_TLS_GD32_FDPIC,
+R_ARM_TLS_LDM32_FDPIC and R_ARM_TLS_IE32_FDPIC.
+
+  R_ARM_TLS_GD32_FDPIC
+  --------------------
+    The R_ARM_TLS_GD32_FDPIC has the same semantic as R_ARM_TLS_GD32 with the
+    exception that R_ARM_TLS_GD32_FDPIC resolves to the offset of the first of
+    the got entries from the start of the got.
+
+  R_ARM_TLS_LDM32_FDPIC
+  --------------------
+    The R_ARM_TLS_LDM32_FDPIC has the same semantic as R_ARM_TLS_LDM32 with the
+    exception that R_ARM_TLS_LDM32_FDPIC resolves to the offset of the first of
+    the got entries from the start of the got.
+
+  R_ARM_TLS_IE32_FDPIC
+  ---------------------
+    The R_ARM_TLS_IE32_FDPIC has the same semantic as R_ARM_TLS_IE32 with the
+    exception that R_ARM_TLS_IE32_FDPIC resolves to the offset of the got entries
+    from the start of the got.
+
+arm EABI vs. arm FDPIC ABI Differences
+-------------------------------------------------
+
+The arm FDPIC ABI uses the same parameter passing
+conventions established by the arm EABI, but it is a different ABI
+due to the following differences:
+
+    *  The representation of function pointers is different.  In
+       the arm EABI, a function pointer is merely the address of
+       the function in question.  In the arm FDPIC ABI,
+       a function pointer is the address of a descriptor containing
+       the function's entry point and GOT address.
+
+    *  The arm EABI assumes that any text and data segment
+       load time relocations will cause both segments to be relocated
+       by the same amount.  The arm FDPIC ABI assumes that
+       these segments will be relocated by different amounts.
+
+    *  Calling conventions are different (even though parameter
+       passing conventions are the same).  The arm FDPIC
+       ABI requires that R9 be set to the GOT address upon
+       function entry.  The arm EABI has no such requirement.
+
+    *  The mechanisms used for accessing global data are different
+       (and incompatible) between the arm EABI and the arm FDPIC ABI.
+
+    *  arm FDPIC ABI add relocations.
+
+Revision History
+----------------
+
+
+* Revision 0.2 : Thu Mar 28 2013
+ - ABI description is complete
+
+* Revision 0.3 : Thu May 23 2013
+ - Indirect call can use any register to contain function address
+ - No more constraint order on got/function address load for indirect call
+since we don't support multi-threaded with lazy binding.
+
+* Revision 0.4 : Fri Aug 28 2015
+ - Reduce default stack size from 128Kb to 32Kb
+ - Add Native Posix Thread Library support
 
