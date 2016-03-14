@@ -1,6 +1,6 @@
 ARM FDPIC ABI
 
-V0.4
+V1.0
 
 Introduction
 ------------
@@ -554,14 +554,12 @@ Below is a list of additional operators for writing assembly code.
 ELF Header
 ----------
 
-The ARM processor specific flag for the "e_flags" field in the ELF
-header which indicates the use of this ABI is EF_ARM_FDPIC.  The value
-for this flag is 0x00001000.  A flag EF_ARM_PIC, value 0x00000020, is
-also defined.
+FDPIC elf objects indicate usage of ARM FDPIC usage ABI by setting value
+65 for e_ident[EI_OSABI] entry.
 
-When both EF_ARM_FDPIC and EF_ARM_PIC are set, it means each segment of
-the binary can be loaded at an arbitrary address, which means sharing
-of text segments is possible.  If EF_ARM_FDPIC is set but EF_ARM_PIC is
+When both e_ident[EI_OSABI] is 65 and EF_ARM_PIC is set, it means each segment
+of the binary can be loaded at an arbitrary address, which means sharing
+of text segments is possible.  If e_ident[EI_OSABI] is 65 but EF_ARM_PIC is
 clear, all segments must be relocated by the same amount.  The linker
 should warn and clear EF_ARM_PIC when linking FDPIC binaries if it
 finds any inter-segment relocation, and set it otherwise.  Examples of
@@ -916,3 +914,6 @@ since we don't support multi-threaded with lazy binding.
  - Reduce default stack size from 128Kb to 32Kb
  - Add Native Posix Thread Library support
 
+* Revision 1.0 : Mon Mar 14 2016
+ - Replace e_flags usage by e_ident[EI_OSABI] value to identify fdpic elf
+objects.
